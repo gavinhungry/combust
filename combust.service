@@ -1,0 +1,11 @@
+[Unit]
+Description=Combust Firewall Script
+
+[Service]
+Type=oneshot
+ExecStart=/etc/iptables/combust
+ExecStop=/usr/lib/systemd/scripts/iptables-flush
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
