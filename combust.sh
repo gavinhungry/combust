@@ -2,7 +2,7 @@
 #
 # Name: combust
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 01 Jul 2006 (last modified: 14 Oct 2012)
+# Date: 01 Jul 2006 (last modified: 19 Oct 2012)
 # Desc: iptables-based firewall script with simple profiles
 #
 
@@ -11,22 +11,26 @@ declare -A CLIENTS
 source /etc/iptables/combust.conf
 
 [ ${1-0} == '-v' ] && VERBOSE=1 || VERBOSE=0
+[ ${1-0} == '-d' ] && DRYRUN=1 || DRYRUN=0
 
 # ---[ FUNCTIONS ]--------------------------------------------------------------
 msg() {
-  [ $VERBOSE == 1 ] && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
+  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
 }
 
 ipt() {
-  IPTABLES=$(which iptables)
-  [ $VERBOSE == 1 ] && echo "IPv4: $@"
-  $IPTABLES "$@"
+  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv4: $@"
+  [ $DRYRUN == 0 ] && $IPTABLES "$@"
 }
 
 ipt6() {
   [ ${USE_IPV6-0} == 1 ] || return 0
-  [ $VERBOSE == 1 ] && echo "IPv6: $@"
-  $IP6TABLES "$@"
+  ipt6_do "$@"
+}
+
+ipt6_do() {
+  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv6: $@"
+  [ $DRYRUN == 0 ] && $IP6TABLES "$@"
 }
 
 
@@ -44,6 +48,16 @@ ipt6 -F
 ipt6 -X
 ipt6 -N valid_src_ipv6
 ipt6 -N valid_dst_ipv6
+
+if [ ${USE_IPV6-0} == 0 -a -x $IP6TABLES ]; then
+  msg 'Not using IPv6'
+
+  ipt6_do -F
+  ipt6_do -X
+  ipt6_do -P INPUT DROP
+  ipt6_do -P OUTPUT DROP
+  ipt6_do -P FORWARD DROP
+fi
 
 
 # ---[ VALID ]------------------------------------------------------------------
@@ -231,3 +245,7 @@ if [ ${ROUTING-0} == 1 ]; then
     ipt -t nat -A POSTROUTING -o ${IF[$I]-$I} -j MASQUERADE
   done
 fi
+
+
+# ---[ CLEANUP ]----------------------------------------------------------------
+[ $DRYRUN == 1 ] && msg 'This was a dry run, no changes have been applied'
