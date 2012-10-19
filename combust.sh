@@ -13,6 +13,8 @@ source /etc/iptables/combust.conf
 [ ${1-0} == '-v' ] && VERBOSE=1 || VERBOSE=0
 [ ${1-0} == '-d' ] && DRYRUN=1 || DRYRUN=0
 
+ERRORS=0
+
 # ---[ FUNCTIONS ]--------------------------------------------------------------
 msg() {
   [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
@@ -20,17 +22,21 @@ msg() {
 
 ipt() {
   [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv4: $@"
-  [ $DRYRUN == 0 ] && $IPTABLES "$@"
+  if [ $DRYRUN == 0 ]; then
+    $IPTABLES "$@" || let ERRORS++
+  fi
 }
 
 ipt6() {
   [ ${USE_IPV6-0} == 1 ] || return 0
-  ipt6_do "$@"
+  ipt6_do "$@" || let ERRORS++
 }
 
 ipt6_do() {
   [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv6: $@"
-  [ $DRYRUN == 0 ] && $IP6TABLES "$@"
+  if [ $DRYRUN == 0 ]; then
+    $IP6TABLES "$@"
+  fi
 }
 
 
@@ -75,7 +81,7 @@ ipt  -A valid_src_ipv4 -s 10.0.0.0/8      -j DROP
 ipt  -A valid_src_ipv4 -s 169.254.0.0/16  -j DROP
 ipt  -A valid_src_ipv4 -s 0.0.0.0/8       -j DROP
 ipt  -A valid_src_ipv4 -s 224.0.0.0/4     -j DROP
-ipt  -A valid_src_ipv4 -d 255.255.255.255 -j DROP
+ipt  -A valid_src_ipv4 -s 255.255.255.255 -j DROP
 ipt6 -A valid_src_ipv6 -s ::1/128         -j DROP
 
 msg 'External interface destinations'
@@ -249,3 +255,4 @@ fi
 
 # ---[ CLEANUP ]----------------------------------------------------------------
 [ $DRYRUN == 1 ] && msg 'This was a dry run, no changes have been applied'
+exit $ERRORS
