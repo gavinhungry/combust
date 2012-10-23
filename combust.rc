@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+
+START=41
+
+start() {
+	/etc/iptables/combust.sh
+}
+
+stop() {
+	/etc/iptables/combust.sh --flush
+}
