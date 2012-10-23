@@ -2,7 +2,7 @@
 #
 # Name: combust
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 01 Jul 2006 (last modified: 19 Oct 2012)
+# Date: 01 Jul 2006 (last modified: 23 Oct 2012)
 # Desc: iptables-based firewall script with simple profiles
 #
 
@@ -10,31 +10,45 @@ declare -A IF
 declare -A CLIENTS
 source /etc/iptables/combust.conf
 
-[ ${1-0} == '-v' ] && VERBOSE=1 || VERBOSE=0
-[ ${1-0} == '-d' ] && DRYRUN=1 || DRYRUN=0
-
 ERRORS=0
+for PARM in "$@"; do
+  case $PARM in
+    '-d'|'--dry-run') DRYRUN=1 ;&
+    '-v'|'--verbose') VERBOSE=1 ;;
+    '-f'|'--flush') FLUSH=1 ;;
+  esac
+done
+
 
 # ---[ FUNCTIONS ]--------------------------------------------------------------
+pref() {
+  [ ${!1:-0} -eq 1 ] && return
+}
+
 msg() {
-  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
+  pref VERBOSE && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
+}
+
+finish() {
+  pref DRYRUN && msg 'This was a dry run, no changes have been applied'
+  exit $ERRORS
 }
 
 ipt() {
-  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv4: $@"
-  if [ $DRYRUN == 0 ]; then
+  pref VERBOSE && echo "IPv4: $@"
+  if ! pref DRYRUN; then
     $IPTABLES "$@" || let ERRORS++
   fi
 }
 
 ipt6() {
-  [ ${USE_IPV6-0} == 1 ] || return 0
+  pref USE_IPV6 || return 0
   ipt6_do "$@" || let ERRORS++
 }
 
 ipt6_do() {
-  [ $VERBOSE == 1 -o $DRYRUN == 1 ] && echo "IPv6: $@"
-  if [ $DRYRUN == 0 ]; then
+  pref VERBOSE && echo "IPv6: $@"
+  if ! pref DRYRUN; then
     $IP6TABLES "$@"
   fi
 }
@@ -43,27 +57,46 @@ ipt6_do() {
 # ---[ FLUSH ]------------------------------------------------------------------
 msg 'Flushing existing rules'
 
+ipt -Z
 ipt -F
 ipt -X
 ipt -t nat -F
 ipt -t nat -X
-ipt -N valid_src_ipv4
-ipt -N valid_dst_ipv4
+ipt -t mangle -F
+ipt -t mangle -X
 
+ipt6 -Z
 ipt6 -F
 ipt6 -X
-ipt6 -N valid_src_ipv6
-ipt6 -N valid_dst_ipv6
 
-if [ ${USE_IPV6-0} == 0 -a -x $IP6TABLES ]; then
+if pref FLUSH; then
+  ipt -P INPUT ACCEPT
+  ipt -P OUTPUT ACCEPT
+  ipt -P FORWARD ACCEPT
+
+  ipt6 -P INPUT ACCEPT
+  ipt6 -P OUTPUT ACCEPT
+  ipt6 -P FORWARD ACCEPT
+
+  finish
+fi
+
+if ! pref USE_IPV6 && [ -x $IP6TABLES ]; then
   msg 'Not using IPv6'
 
+  ipt6_do -Z
   ipt6_do -F
   ipt6_do -X
   ipt6_do -P INPUT DROP
   ipt6_do -P OUTPUT DROP
   ipt6_do -P FORWARD DROP
 fi
+
+ipt -N valid_src_ipv4
+ipt -N valid_dst_ipv4
+
+ipt6 -N valid_src_ipv6
+ipt6 -N valid_dst_ipv6
 
 
 # ---[ VALID ]------------------------------------------------------------------
@@ -113,8 +146,20 @@ ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
 ipt6 -A INPUT -i ${IF[LO]} -s ::1/128 -d ::1/128 -j ACCEPT
 
 msg 'filter/INPUT: common attacks'
+ipt  -N syn_flood_ipv4
+ipt6 -N syn_flood_ipv6
+
+ipt  -A syn_flood_ipv4 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
+ipt6 -A syn_flood_ipv6 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
+
+ipt  -A syn_flood_ipv4 -j DROP
+ipt6 -A syn_flood_ipv6 -j DROP
+
 for I in ${IF[WAN]}; do
   WAN=${IF[$I]-$I}
+
+  ipt  -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv4
+  ipt6 -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv6
 
   ipt  -A INPUT -i $WAN -p tcp -m state --state NEW ! --syn -j DROP
   ipt6 -A INPUT -i $WAN -p tcp -m state --state NEW ! --syn -j DROP
@@ -145,18 +190,15 @@ for I in ${IF[WAN]}; do
 done
 
 msg 'filter/INPUT: allowed LAN traffic'
-if [ ${ROUTING-0} == 1 ]; then
+if pref ROUTING; then
   ipt  -A INPUT -i ${IF[LAN]} -j ACCEPT
   ipt6 -A INPUT -i ${IF[LAN]} -j ACCEPT
 fi
 
 # ICMP ping
-if [ ${ICMP_REPLY-0} == 1 ]; then
-  ipt  -A INPUT -p icmp   --icmp-type   echo-request -m limit --limit 8/sec -j ACCEPT
-  ipt6 -A INPUT -p icmpv6 --icmpv6-type echo-request -m limit --limit 8/sec -j ACCEPT
-elif [ ${ICMP_REPLY-0} == 'LAN' ]; then
-  ipt  -A INPUT -i ${IF[LAN]} -p icmp   --icmp-type   echo-request -m limit --limit 8/sec -j ACCEPT
-  ipt6 -A INPUT -i ${IF[LAN]} -p icmpv6 --icmpv6-type echo-request -m limit --limit 8/sec -j ACCEPT
+if pref ICMP_REPLY; then
+  ipt  -A INPUT -p icmp   --icmp-type   echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
+  ipt6 -A INPUT -p icmpv6 --icmpv6-type echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
 fi
 
 # IPv6
@@ -167,7 +209,16 @@ msg 'filter/INPUT: per-interface rules'
 for IL in ${!IF[@]}; do
   for I in ${IF[$IL]}; do
     for PROTO in TCP UDP; do
-      for PORT in $(eval echo \$${PROTO}_${IL}); do
+      PROTO_IL=${PROTO}_${IL}
+      for PORT in ${!PROTO_IL}; do
+        if [ $(echo $PORT | grep -c ':') -eq 1 ]; then
+          DPORT=$(echo $PORT | cut -d':' -f1)
+          LIMIT=$(echo $PORT | cut -d':' -f2)
+          BURST=$(echo $PORT | cut -d':' -f3)
+          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m state --state NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m state --state NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          continue
+        fi
         ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $PORT -j ACCEPT
         ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $PORT -j ACCEPT
       done
@@ -201,7 +252,7 @@ ipt  -A FORWARD -m state --state INVALID -j DROP
 ipt6 -A FORWARD -m state --state INVALID -j DROP
 
 msg 'filter/FORWARD: route forwarding'
-if [ ${ROUTING-0} == 1 ]; then
+if pref ROUTING; then
   ipt  -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
   ipt6 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 
@@ -214,7 +265,7 @@ if [ ${ROUTING-0} == 1 ]; then
   done
 fi
 
-if [ ${VPN_SERVER-0} == 1 ]; then
+if pref VPN_SERVER; then
   for I in ${IF[WAN]}; do
     ipt  -A FORWARD -i ${IF[$I]-$I} -o ${IF[VPN]} -d $IPV4_VPN -m state --state RELATED,ESTABLISHED -j ACCEPT
     ipt  -A FORWARD -i ${IF[VPN]} -o ${IF[$I]-$I} -s $IPV4_VPN -j ACCEPT
@@ -224,7 +275,8 @@ fi
 msg 'filter/FORWARD: client port forwards'
 for CLIENT in ${!CLIENTS[@]}; do
   for PROTO in TCP UDP; do
-    for PORT in $(eval echo \$${PROTO}_${CLIENT}); do
+    PROTO_CLIENT=${PROTO}_${CLIENT}
+    for PORT in ${!PROTO_CLIENT}; do
       FROM=$(echo $PORT | cut -d':' -f1)
       DEST=$(echo $PORT | cut -d':' -f2)
       HOST=${CLIENTS[$CLIENT]}
@@ -240,19 +292,16 @@ done
 # ---[ POSTROUTING ]------------------------------------------------------------
 msg 'nat/POSTROUTING'
 
-if [ ${VPN_SERVER-0} == 1 ]; then
+if pref VPN_SERVER; then
   for I in ${IF[WAN]}; do
     ipt -t nat -A POSTROUTING -o ${IF[$I]-$I} -s $IPV4_VPN -j MASQUERADE
   done
 fi
 
-if [ ${ROUTING-0} == 1 ]; then
+if pref ROUTING; then
   for I in ${IF[WAN]}; do
     ipt -t nat -A POSTROUTING -o ${IF[$I]-$I} -j MASQUERADE
   done
 fi
 
-
-# ---[ CLEANUP ]----------------------------------------------------------------
-[ $DRYRUN == 1 ] && msg 'This was a dry run, no changes have been applied'
-exit $ERRORS
+finish
