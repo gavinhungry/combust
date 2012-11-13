@@ -2,7 +2,7 @@
 #
 # Name: combust
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 01 Jul 2006 (last modified: 23 Oct 2012)
+# Date: 01 Jul 2006 (last modified: 12 Nov 2012)
 # Desc: iptables-based firewall script with simple profiles
 #
 
