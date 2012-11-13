@@ -135,11 +135,11 @@ msg 'filter/INPUT'
 ipt  -P INPUT DROP
 ipt6 -P INPUT DROP
 
-ipt  -A INPUT -m state --state INVALID -j DROP
-ipt6 -A INPUT -m state --state INVALID -j DROP
+ipt  -A INPUT -m conntrack --ctstate INVALID -j DROP
+ipt6 -A INPUT -m conntrack --ctstate INVALID -j DROP
 
-ipt  -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
-ipt6 -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+ipt  -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+ipt6 -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # loopback
 ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
@@ -161,8 +161,8 @@ for I in ${IF[WAN]}; do
   ipt  -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv4
   ipt6 -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv6
 
-  ipt  -A INPUT -i $WAN -p tcp -m state --state NEW ! --syn -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp -m state --state NEW ! --syn -j DROP
+  ipt  -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
+  ipt6 -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
 
   ipt  -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
@@ -215,8 +215,8 @@ for IL in ${!IF[@]}; do
           DPORT=$(echo $PORT | cut -d':' -f1)
           LIMIT=$(echo $PORT | cut -d':' -f2)
           BURST=$(echo $PORT | cut -d':' -f3)
-          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m state --state NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
-          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m state --state NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
           continue
         fi
         ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $PORT -j ACCEPT
@@ -233,8 +233,8 @@ msg 'filter/OUTPUT'
 ipt  -P OUTPUT ACCEPT
 ipt6 -P OUTPUT ACCEPT
 
-ipt  -A OUTPUT -m state --state INVALID -j DROP
-ipt6 -A OUTPUT -m state --state INVALID -j DROP
+ipt  -A OUTPUT -m conntrack --ctstate INVALID -j DROP
+ipt6 -A OUTPUT -m conntrack --ctstate INVALID -j DROP
 
 for I in ${IF[WAN]}; do
   ipt  -A OUTPUT -o ${IF[$I]-$I} -j valid_dst_ipv4
@@ -248,13 +248,13 @@ msg 'filter/FORWARD'
 ipt  -P FORWARD DROP
 ipt6 -P FORWARD DROP
 
-ipt  -A FORWARD -m state --state INVALID -j DROP
-ipt6 -A FORWARD -m state --state INVALID -j DROP
+ipt  -A FORWARD -m conntrack --ctstate INVALID -j DROP
+ipt6 -A FORWARD -m conntrack --ctstate INVALID -j DROP
 
 msg 'filter/FORWARD: route forwarding'
 if pref ROUTING; then
-  ipt  -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-  ipt6 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+  ipt  -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+  ipt6 -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
   ipt  -A FORWARD -i ${IF[LAN]} -o ${IF[LAN]} -j ACCEPT
   ipt6 -A FORWARD -i ${IF[LAN]} -o ${IF[LAN]} -j ACCEPT
@@ -267,7 +267,7 @@ fi
 
 if pref VPN_SERVER; then
   for I in ${IF[WAN]}; do
-    ipt  -A FORWARD -i ${IF[$I]-$I} -o ${IF[VPN]} -d $IPV4_VPN -m state --state RELATED,ESTABLISHED -j ACCEPT
+    ipt  -A FORWARD -i ${IF[$I]-$I} -o ${IF[VPN]} -d $IPV4_VPN -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
     ipt  -A FORWARD -i ${IF[VPN]} -o ${IF[$I]-$I} -s $IPV4_VPN -j ACCEPT
   done
 fi
