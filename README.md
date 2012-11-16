@@ -1,11 +1,17 @@
 combust
 =======
-Combust is a simple iptables firewall script to unify the mulitple, rapidly
-diverging firewall scripts I've been maintaining.
+combust is an iptables-based firewall script with profiles.
 
 
-Configuration
--------------
-All configuration options are in `combust.conf`, however clearly it won't do
-everything you could ever possibly want (just everything that I currently need
-it to do).
+Usage
+-----
+All configuration options are located in `combust.conf`.
+
+A systemd service unit (`combust.service`) and OpenWrt-style init script
+(`combust.rc`) is provided.
+
+
+Notes
+-----
+Clearly, combust is limited in the tasks it can perform (being limited to what I
+currently need it do to).
