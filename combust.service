@@ -1,5 +1,5 @@
 [Unit]
-Description=Combust Firewall Script
+Description=combust Firewall Script
 
 [Service]
 Type=oneshot
