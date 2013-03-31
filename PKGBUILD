@@ -32,6 +32,6 @@ package() {
   install -d $pkgdir/usr/lib/systemd/system/
   install -m755 combust.sh "${pkgdir}"/etc/iptables/
   install -m600 combust.conf "${pkgdir}"/etc/iptables/
-  install -m644 combust.service "${pkgdir}"/usr/lib/systemd/system/  
+  install -m644 combust.service "${pkgdir}"/usr/lib/systemd/system/
 }
 

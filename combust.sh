@@ -284,7 +284,7 @@ for CLIENT in ${!CLIENTS[@]}; do
         ipt -t nat -A PREROUTING -i ${IF[$I]-$I} -p ${PROTO,,} --dport $FROM -j DNAT --to-destination $HOST:$DEST
         ipt        -A FORWARD    -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DEST -d $HOST -j ACCEPT
       done
-    done  
+    done
   done
 done
 
