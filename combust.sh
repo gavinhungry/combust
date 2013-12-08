@@ -2,7 +2,7 @@
 #
 # Name: combust
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 01 Jul 2006 (last modified: 12 Nov 2012)
+# Date: 01 Jul 2006 (last modified: 08 Dec 2013)
 # Desc: iptables-based firewall script with simple profiles
 #
 
@@ -107,10 +107,12 @@ if [ ! -z "$IPV4_WAN" ]; then
   done
 fi
 
+[ -z $RFC_1918_BITS ] && RFC_1918_BITS=0
+[ $RFC_1918_BITS -ne 24 ] && ipt -A valid_src_ipv4 -s 10.0.0.0/8     -j DROP
+[ $RFC_1918_BITS -ne 20 ] && ipt -A valid_src_ipv4 -s 172.16.0.0/12  -j DROP
+[ $RFC_1918_BITS -ne 16 ] && ipt -A valid_src_ipv4 -s 192.168.0.0/16 -j DROP
+
 ipt  -A valid_src_ipv4 -s 127.0.0.0/8     -j DROP
-ipt  -A valid_src_ipv4 -s 192.168.0.0/16  -j DROP
-ipt  -A valid_src_ipv4 -s 172.16.0.0/12   -j DROP
-ipt  -A valid_src_ipv4 -s 10.0.0.0/8      -j DROP
 ipt  -A valid_src_ipv4 -s 169.254.0.0/16  -j DROP
 ipt  -A valid_src_ipv4 -s 0.0.0.0/8       -j DROP
 ipt  -A valid_src_ipv4 -s 224.0.0.0/4     -j DROP
