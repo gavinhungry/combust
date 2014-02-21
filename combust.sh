@@ -2,7 +2,7 @@
 #
 # Name: combust
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 01 Jul 2006 (last modified: 08 Dec 2013)
+# Date: 01 Jul 2006 (last modified: 20 Feb 2014)
 # Desc: iptables-based firewall script with simple profiles
 #
 
@@ -217,12 +217,16 @@ for IL in ${!IF[@]}; do
           DPORT=$(echo $PORT | cut -d':' -f1)
           LIMIT=$(echo $PORT | cut -d':' -f2)
           BURST=$(echo $PORT | cut -d':' -f3)
-          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
-          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DPORT -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          for P in $(eval echo "$DPORT"); do
+            ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+            ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+          done
           continue
         fi
-        ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $PORT -j ACCEPT
-        ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $PORT -j ACCEPT
+        for P in $(eval echo "$PORT"); do
+          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
+          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
+        done
       done
     done
   done
