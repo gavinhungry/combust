@@ -25,9 +25,6 @@ for PARM in "$@"; do
   esac
 done
 
-# FIXME
-# VERBOSE=1
-
 # ---[ FUNCTIONS ]--------------------------------------------------------------
 pref() {
   [ ${!1:-0} -eq 1 ] && return
@@ -49,9 +46,9 @@ do_nft() {
 
   pref VERBOSE && echo "nft $CMD $SUBCMD $FAMILY $@"
 
-  if ! pref DRYRUN; then
-    echo "$NFT $CMD $SUBCMD $FAMILY $@" || let ERRORS++
-  fi
+  # if ! pref DRYRUN; then
+  #   $NFT $CMD $SUBCMD $FAMILY $@ || let ERRORS++
+  # fi
 }
 
 nft4() {
@@ -59,50 +56,34 @@ nft4() {
 }
 
 nft6() {
+  # FIXME
   # pref USE_IPV6 || return 0
   do_nft "ip6" "$@"
 }
 
-
-
-
 # # ---[ FLUSH ]------------------------------------------------------------------
-# msg 'Flushing existing rules'
+msg 'Flushing existing rules'
 
-# ipt -Z
-# ipt -F
-# ipt -X
-# ipt -t nat -F
-# ipt -t nat -X
-# ipt -t mangle -F
-# ipt -t mangle -X
+# https://gist.github.com/gavinhungry/9403037
+for FAMILY in ip ip6 arp bridge; do
+  TABLES=$($NFT list tables $FAMILY | grep "^table\s" | cut -d' ' -f2)
 
-# ipt6 -Z
-# ipt6 -F
-# ipt6 -X
+  for TABLE in $TABLES; do
+    CHAINS=$($NFT list table $FAMILY $TABLE | grep "^\schain\s" | cut -d' ' -f2)
 
-# if pref FLUSH; then
-#   ipt -P INPUT ACCEPT
-#   ipt -P OUTPUT ACCEPT
-#   ipt -P FORWARD ACCEPT
+    for CHAIN in $CHAINS; do
+      do_nft $FAMILY flush chain $TABLE $CHAIN
+      do_nft $FAMILY delete chain $TABLE $CHAIN
+    done
 
-#   ipt6 -P INPUT ACCEPT
-#   ipt6 -P OUTPUT ACCEPT
-#   ipt6 -P FORWARD ACCEPT
+    do_nft $FAMILY flush table $TABLE
+    do_nft $FAMILY delete table $TABLE
+  done
+done
 
-#   finish
-# fi
-
-# if ! pref USE_IPV6 && [ -x $IP6TABLES ]; then
-#   msg 'Not using IPv6'
-
-#   ipt6_do -Z
-#   ipt6_do -F
-#   ipt6_do -X
-#   ipt6_do -P INPUT DROP
-#   ipt6_do -P OUTPUT DROP
-#   ipt6_do -P FORWARD DROP
-# fi
+if pref FLUSH; then
+  finish
+fi
 
 # ipt -N valid_src_ipv4
 # ipt -N valid_dst_ipv4
