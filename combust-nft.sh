@@ -2,7 +2,7 @@
 #
 # Name: combust-nft
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 06 Mar 2014
+# Date: 06 Mar 2014 (last modified: 07 Mar 2014)
 # Desc: nftables-based firewall script with simple profiles
 #
 # THIS SCRIPT IS INCOMPLETE
@@ -14,7 +14,7 @@ declare -A IF
 declare -A CLIENTS
 
 # FIXME: /etc/combust/combust.conf
-source ./combust.conf
+source ./combust-nft.conf
 
 ERRORS=0
 for PARM in "$@"; do
@@ -39,32 +39,58 @@ finish() {
   exit $ERRORS
 }
 
-do_nft() {
+nft() {
   FAMILY=$1; shift
   CMD=$1; shift
   SUBCMD=$1; shift
 
   pref VERBOSE && echo "nft $CMD $SUBCMD $FAMILY $@"
 
-  # if ! pref DRYRUN; then
-  #   $NFT $CMD $SUBCMD $FAMILY $@ || let ERRORS++
-  # fi
+  if ! pref DRYRUN; then
+    $NFT $CMD $SUBCMD $FAMILY $@ || let ERRORS++
+  fi
 }
 
 nft4() {
-  do_nft "ip" "$@"
+  nft "ip" "$@"
 }
 
 nft6() {
   # FIXME
   # pref USE_IPV6 || return 0
-  do_nft "ip6" "$@"
+  nft "ip6" "$@"
 }
 
-# # ---[ FLUSH ]------------------------------------------------------------------
+nft4chain() {
+  nft4 add chain filter "$@"
+}
+
+nft6chain() {
+  nft6 add chain filter "$@"
+}
+
+nftchain() {
+  nft4chain "$@"
+  nft6chain "$@"
+}
+
+nft4rule() {
+  nft4 add rule filter "$@"
+}
+
+nft6rule() {
+  nft6 add rule filter "$@"
+}
+
+nftrule() {
+  nft4rule "$@"
+  nft6rule "$@"
+}
+
+# ---[ FLUSH ]------------------------------------------------------------------
 msg 'Flushing existing rules'
 
-# https://gist.github.com/gavinhungry/9403037
+# https://twitter.com/gavinhungry/status/441743648611262464
 for FAMILY in ip ip6 arp bridge; do
   TABLES=$($NFT list tables $FAMILY | grep "^table\s" | cut -d' ' -f2)
 
@@ -72,12 +98,12 @@ for FAMILY in ip ip6 arp bridge; do
     CHAINS=$($NFT list table $FAMILY $TABLE | grep "^\schain\s" | cut -d' ' -f2)
 
     for CHAIN in $CHAINS; do
-      do_nft $FAMILY flush chain $TABLE $CHAIN
-      do_nft $FAMILY delete chain $TABLE $CHAIN
+      nft $FAMILY flush chain $TABLE $CHAIN
+      nft $FAMILY delete chain $TABLE $CHAIN
     done
 
-    do_nft $FAMILY flush table $TABLE
-    do_nft $FAMILY delete table $TABLE
+    nft $FAMILY flush table $TABLE
+    nft $FAMILY delete table $TABLE
   done
 done
 
@@ -85,104 +111,79 @@ if pref FLUSH; then
   finish
 fi
 
-# ipt -N valid_src_ipv4
-# ipt -N valid_dst_ipv4
+# input/output/forward chains on a filter table
+$NFT -f /etc/nftables/ipv4-filter
+$NFT -f /etc/nftables/ipv6-filter
 
-# ipt6 -N valid_src_ipv6
-# ipt6 -N valid_dst_ipv6
+nftchain valid_src
+nftchain valid_dst
+
+# ---[ VALID ]------------------------------------------------------------------
+msg 'External interface sources'
+if [ ! -z "$IPV4_LAN" ]; then
+  for RANGE in $IPV4_LAN; do
+    nft4rule valid_src ip saddr $RANGE return
+  done
+fi
+
+# RFC1918 private addresses - include in IPV4_LAN to allow
+nft4rule valid_src ip saddr 10.0.0.0/8     drop
+nft4rule valid_src ip saddr 172.16.0.0/12  drop
+nft4rule valid_src ip saddr 192.168.0.0/16 drop
+
+nft4rule valid_src ip saddr 127.0.0.0/8 drop
+nft4rule valid_src ip saddr 169.254.0.0/16 drop
+nft4rule valid_src ip saddr 0.0.0.0/8 drop
+nft4rule valid_src ip saddr 255.255.255.255 drop
+nft4rule valid_src ip saddr 192.168.0.0/16 drop
+
+if [ ! -z "$IPV6_LAN" ]; then
+  for RANGE in $IPV6_LAN; do
+    nft6rule valid_src ip6 saddr $RANGE return
+  done
+fi
+
+nft6rule valid_src ip6 saddr ::1/128 drop
+
+msg 'External interface destinations'
+nft4rule valid_dst ip daddr 127.0.0.0/8 drop
+nft4rule valid_dst ip daddr 224.0.0.0/4 drop
+
+nft6rule valid_dst ip6 daddr ::1/128 drop
 
 
-# # ---[ VALID ]------------------------------------------------------------------
-# msg 'External interface sources'
-# if [ ! -z "$IPV4_WAN" ]; then
-#   for RANGE in $IPV4_WAN; do
-#     ipt -A valid_src_ipv4 -s $RANGE -j RETURN
-#   done
-# fi
+# ---[ INPUT ]------------------------------------------------------------------
+msg 'filter/input'
 
-# [ -z $RFC_1918_BITS ] && RFC_1918_BITS=0
-# [ $RFC_1918_BITS -ne 24 ] && ipt -A valid_src_ipv4 -s 10.0.0.0/8     -j DROP
-# [ $RFC_1918_BITS -ne 20 ] && ipt -A valid_src_ipv4 -s 172.16.0.0/12  -j DROP
-# [ $RFC_1918_BITS -ne 16 ] && ipt -A valid_src_ipv4 -s 192.168.0.0/16 -j DROP
+nftrule input ct state invalid drop
+nftrule input ct state {related, established} accept
 
-# ipt  -A valid_src_ipv4 -s 127.0.0.0/8     -j DROP
-# ipt  -A valid_src_ipv4 -s 169.254.0.0/16  -j DROP
-# ipt  -A valid_src_ipv4 -s 0.0.0.0/8       -j DROP
-# ipt  -A valid_src_ipv4 -s 224.0.0.0/4     -j DROP
-# ipt  -A valid_src_ipv4 -s 255.255.255.255 -j DROP
-# ipt6 -A valid_src_ipv6 -s ::1/128         -j DROP
+# loopback
+nft4rule input iifname ${IF[LO]} ip saddr 127.0.0.0/8 ip daddr 127.0.0.0/8 accept
+nft6rule input iifname ${IF[LO]} ip6 saddr ::1/128 ip6 daddr ::1/128 accept
 
-# msg 'External interface destinations'
-# if [ ! -z "$IPV6_WAN" ]; then
-#   for RANGE in $IPV6_WAN; do
-#     ipt6 -A valid_src_ipv6 -s $RANGE -j RETURN
-#   done
-# fi
+msg 'filter/input: common attacks'
+nftchain syn_flood
+nftrule syn_flood limit rate 2/second accept # FIXME: burst of 4
+nftrule syn_flood accept
 
-# ipt  -A valid_dst_ipv4 -d 127.0.0.0/8 -j DROP
-# ipt  -A valid_dst_ipv4 -d 224.0.0.0/4 -j DROP
-# ipt6 -A valid_dst_ipv6 -d ::1/128     -j DROP
+for I in ${IF[WAN]}; do
+  WAN=${IF[$I]-$I}
 
+  nftrule input iifname $WAN tcp flags '& (syn|rst|ack) == (syn)' jump syn_flood
 
-# # ---[ INPUT ]------------------------------------------------------------------
-# msg 'filter/INPUT'
+  nftrule input iifname $WAN ct state new tcp flags '& (syn) < (syn)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (syn|rst) == (syn|rst)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) < (fin)' drop
+  nftrule input iifname $WAN ct state new tcp flags '== (fin|syn|rst|psh|ack|urg)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|psh|urg)' drop
+  nftrule input iifname $WAN ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn|psh|urg)' drop
 
-# ipt  -P INPUT DROP
-# ipt6 -P INPUT DROP
+  nftrule input iifname $WAN jump valid_src
+done
 
-# ipt  -A INPUT -m conntrack --ctstate INVALID -j DROP
-# ipt6 -A INPUT -m conntrack --ctstate INVALID -j DROP
-
-# ipt  -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-# ipt6 -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-
-# # loopback
-# ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
-# ipt6 -A INPUT -i ${IF[LO]} -s ::1/128 -d ::1/128 -j ACCEPT
-
-# msg 'filter/INPUT: common attacks'
-# ipt  -N syn_flood_ipv4
-# ipt6 -N syn_flood_ipv6
-
-# ipt  -A syn_flood_ipv4 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
-# ipt6 -A syn_flood_ipv6 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
-
-# ipt  -A syn_flood_ipv4 -j DROP
-# ipt6 -A syn_flood_ipv6 -j DROP
-
-# for I in ${IF[WAN]}; do
-#   WAN=${IF[$I]-$I}
-
-#   ipt  -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv4
-#   ipt6 -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv6
-
-#   ipt  -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL SYN,FIN -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL SYN,FIN -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL FIN -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL FIN -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL NONE -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL NONE -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL ALL -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL ALL -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,FIN -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,FIN -j DROP
-
-#   ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,SYN,FIN -j DROP
-#   ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,SYN,FIN -j DROP
-
-#   ipt  -A INPUT -i $WAN -j valid_src_ipv4
-#   ipt6 -A INPUT -i $WAN -j valid_src_ipv6
-# done
 
 # msg 'filter/INPUT: allowed LAN traffic'
 # if pref ROUTING; then
@@ -225,6 +226,7 @@ fi
 #   done
 # done
 
+# nftrule input drop
 
 # # ---[ OUTPUT ]-----------------------------------------------------------------
 # msg 'filter/OUTPUT'
