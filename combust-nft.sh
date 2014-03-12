@@ -156,7 +156,7 @@ nft6rule valid_dst ip6 daddr ::1/128 drop
 msg 'filter/input'
 
 nftrule input ct state invalid drop
-nftrule input ct state {related, established} accept
+nftrule input ct state { related, established } accept
 
 # loopback
 nft4rule input iifname ${IF[LO]} ip saddr 127.0.0.0/8 ip daddr 127.0.0.0/8 accept
@@ -197,7 +197,7 @@ if pref ICMP_REPLY; then
 fi
 
 # IPv6
-nft6rule input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-router-advert, nd-neighbor-advert } accept
+nft6rule input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert } accept
 
 msg 'filter/input: per-interface rules'
 for IL in ${!IF[@]}; do
@@ -210,7 +210,7 @@ for IL in ${!IF[@]}; do
           LIMIT=$(echo $PORT | cut -d':' -f2)
           BURST=$(echo $PORT | cut -d':' -f3)
           for P in $(eval echo "$DPORT"); do
-            nftrule input iifname ${IF[$I]-$I} ${PROTO,,} dport $P limit rate ${LIMIT:-8}/minute accept
+            nftrule input iifname ${IF[$I]-$I} ct state new ${PROTO,,} dport $P limit rate ${LIMIT:-8}/minute accept
           done
           continue
         fi
@@ -227,17 +227,13 @@ nftrule input drop
 # ---[ OUTPUT ]-----------------------------------------------------------------
 msg 'filter/output'
 
-# ipt  -P OUTPUT ACCEPT
-# ipt6 -P OUTPUT ACCEPT
+nftrule output ct state invalid drop
 
-# ipt  -A OUTPUT -m conntrack --ctstate INVALID -j DROP
-# ipt6 -A OUTPUT -m conntrack --ctstate INVALID -j DROP
+for I in ${IF[WAN]}; do
+  nftrule output oifname ${IF[$I]-$I} jump valid_dst
+done
 
-# for I in ${IF[WAN]}; do
-#   ipt  -A OUTPUT -o ${IF[$I]-$I} -j valid_dst_ipv4
-#   ipt6 -A OUTPUT -o ${IF[$I]-$I} -j valid_dst_ipv6
-# done
-
+nftrule output accept
 
 # ---[ FORWARD ]----------------------------------------------------------------
 msg 'filter/forward'
