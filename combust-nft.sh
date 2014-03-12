@@ -2,7 +2,7 @@
 #
 # Name: combust-nft
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 06 Mar 2014 (last modified: 07 Mar 2014)
+# Date: 06 Mar 2014 (last modified: 12 Mar 2014)
 # Desc: nftables-based firewall script with simple profiles
 #
 # THIS SCRIPT IS INCOMPLETE
@@ -185,51 +185,47 @@ for I in ${IF[WAN]}; do
 done
 
 
-# msg 'filter/INPUT: allowed LAN traffic'
-# if pref ROUTING; then
-#   ipt  -A INPUT -i ${IF[LAN]} -j ACCEPT
-#   ipt6 -A INPUT -i ${IF[LAN]} -j ACCEPT
-# fi
+msg 'filter/input: allowed LAN traffic'
+if pref ROUTING; then
+  nftrule input iffname ${IF[LAN]} accept
+fi
 
-# # ICMP ping
-# if pref ICMP_REPLY; then
-#   ipt  -A INPUT -p icmp   --icmp-type   echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
-#   ipt6 -A INPUT -p icmpv6 --icmpv6-type echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
-# fi
+# ICMP ping
+if pref ICMP_REPLY; then
+  nft4rule input icmp   type echo-request limit rate 8/second accept
+  nft6rule input icmpv6 type echo-request limit rate 8/second accept
+fi
 
-# # IPv6
-# ipt6 -A INPUT -p icmpv6 -m icmp6 -s fe80::/10 --icmpv6-type neighbour-solicitation  -j ACCEPT
-# ipt6 -A INPUT -p icmpv6 -m icmp6 -s fe80::/10 --icmpv6-type neighbour-advertisement -j ACCEPT
+# IPv6
+nft6rule input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-router-advert, nd-neighbor-advert } accept
 
-# msg 'filter/INPUT: per-interface rules'
-# for IL in ${!IF[@]}; do
-#   for I in ${IF[$IL]}; do
-#     for PROTO in TCP UDP; do
-#       PROTO_IL=${PROTO}_${IL}
-#       for PORT in ${!PROTO_IL}; do
-#         if [ $(echo $PORT | grep -c ':') -eq 1 ]; then
-#           DPORT=$(echo $PORT | cut -d':' -f1)
-#           LIMIT=$(echo $PORT | cut -d':' -f2)
-#           BURST=$(echo $PORT | cut -d':' -f3)
-#           for P in $(eval echo "$DPORT"); do
-#             ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
-#             ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
-#           done
-#           continue
-#         fi
-#         for P in $(eval echo "$PORT"); do
-#           ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
-#           ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
-#         done
-#       done
-#     done
-#   done
-# done
+msg 'filter/input: per-interface rules'
+for IL in ${!IF[@]}; do
+  for I in ${IF[$IL]}; do
+    for PROTO in TCP UDP; do
+      PROTO_IL=${PROTO}_${IL}
+      for PORT in ${!PROTO_IL}; do
+        if [ $(echo $PORT | grep -c ':') -eq 1 ]; then
+          DPORT=$(echo $PORT | cut -d':' -f1)
+          LIMIT=$(echo $PORT | cut -d':' -f2)
+          BURST=$(echo $PORT | cut -d':' -f3)
+          for P in $(eval echo "$DPORT"); do
+            nftrule input iifname ${IF[$I]-$I} ${PROTO,,} dport $P limit rate ${LIMIT:-8}/minute accept
+          done
+          continue
+        fi
+        for P in $(eval echo "$PORT"); do
+          nftrule input iifname ${IF[$I]-$I} ${PROTO,,} dport $P accept
+        done
+      done
+    done
+  done
+done
 
-# nftrule input drop
+nftrule input drop
 
-# # ---[ OUTPUT ]-----------------------------------------------------------------
-# msg 'filter/OUTPUT'
+# ---[ OUTPUT ]-----------------------------------------------------------------
+msg 'filter/output'
 
 # ipt  -P OUTPUT ACCEPT
 # ipt6 -P OUTPUT ACCEPT
@@ -243,8 +239,8 @@ done
 # done
 
 
-# # ---[ FORWARD ]----------------------------------------------------------------
-# msg 'filter/FORWARD'
+# ---[ FORWARD ]----------------------------------------------------------------
+msg 'filter/forward'
 
 # ipt  -P FORWARD DROP
 # ipt6 -P FORWARD DROP
@@ -290,8 +286,8 @@ done
 # done
 
 
-# # ---[ POSTROUTING ]------------------------------------------------------------
-# msg 'nat/POSTROUTING'
+# ---[ POSTROUTING ]------------------------------------------------------------
+msg 'nat/postrouting'
 
 # if pref VPN_SERVER; then
 #   for I in ${IF[WAN]}; do
