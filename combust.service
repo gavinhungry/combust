@@ -1,5 +1,5 @@
 [Unit]
-Description=combust Firewall Script
+Description=Netfilter (iptables) Firewall Script
 
 [Service]
 Type=oneshot

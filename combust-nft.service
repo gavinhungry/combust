@@ -1,5 +1,5 @@
 [Unit]
-Description=combust-nft Firewall Script
+Description=Netfilter (nftables) Firewall Script
 
 [Service]
 Type=oneshot
