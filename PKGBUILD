@@ -2,7 +2,7 @@
 
 pkgname=combust-git
 _gitname=combust
-pkgver=0.38.d05f4d9
+pkgver=0.40.6902fb8
 pkgrel=1
 pkgdesc='iptables/nftables firewall script with profiles'
 arch=('any')
