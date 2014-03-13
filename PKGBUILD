@@ -2,13 +2,13 @@
 
 pkgname=combust-git
 _gitname=combust
-pkgver=0.33.39eab5d
+pkgver=0.38.d05f4d9
 pkgrel=1
 pkgdesc='iptables/nftables firewall script with profiles'
 arch=('any')
 license=('MIT')
 url='https://github.com/gavinhungry/combust'
-depends=('iptables nftables')
+depends=('iptables' 'nftables')
 source=("${_gitname}::git+https://github.com/gavinhungry/${_gitname}.git#branch=master")
 md5sums=('SKIP')
 backup=('etc/combust/combust.conf')
