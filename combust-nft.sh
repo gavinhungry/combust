@@ -96,15 +96,15 @@ nftpolicy() {
 }
 
 _awksub_ip() {
-  awk '{sub(/\/.*/,"",$2); print $2}'
+  grep "\s${1}$" | awk '{sub(/\/.*/,"",$2); print $2}'
 }
 
 inet() {
-  $IP -4 addr show $1 | grep '^\s*inet\s' | _awksub_ip
+  $IP -4 addr show $1 | grep '^\s*inet\s' | _awksub_ip $1
 }
 
 inet6() {
-  $IP -6 addr show $1 | grep '^\s*inet6\s' | _awksub_ip
+  $IP -6 addr show $1 | grep '^\s*inet6\s' | _awksub_ip $1
 }
 
 # ---[ FLUSH ]------------------------------------------------------------------
