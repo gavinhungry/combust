@@ -8,7 +8,7 @@ pkgdesc='iptables/nftables firewall script with profiles'
 arch=('any')
 license=('MIT')
 url='https://github.com/gavinhungry/combust'
-depends=('iptables')
+depends=('iptables nftables')
 source=("${_gitname}::git+https://github.com/gavinhungry/${_gitname}.git#branch=master")
 md5sums=('SKIP')
 backup=('etc/combust/combust.conf')
