@@ -187,7 +187,7 @@ nft6rule filter input iifname ${IF[LO]} ip6 saddr ::1/128 ip6 daddr ::1/128 acce
 
 msg 'filter/input: common attacks'
 nftchain filter syn_flood
-nftrule filter syn_flood limit rate 2/second accept # FIXME: burst of 4
+nftrule filter syn_flood limit rate 2/second accept
 nftrule filter syn_flood accept
 
 for I in ${IF[WAN]}; do
