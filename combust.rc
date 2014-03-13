@@ -3,9 +3,9 @@
 START=41
 
 start() {
-  /etc/iptables/combust.sh
+  /etc/combust/combust.sh
 }
 
 stop() {
-  /etc/iptables/combust.sh --flush
+  /etc/combust/combust.sh --flush
 }

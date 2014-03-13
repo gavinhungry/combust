@@ -12,8 +12,7 @@ IP=/usr/bin/ip
 declare -A IF
 declare -A CLIENTS
 
-# FIXME: /etc/combust/combust.conf
-source ./combust.conf
+source /etc/combust/combust.conf
 
 ERRORS=0
 for PARM in "$@"; do

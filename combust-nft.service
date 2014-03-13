@@ -1,0 +1,11 @@
+[Unit]
+Description=combust-nft Firewall Script
+
+[Service]
+Type=oneshot
+ExecStart=/etc/combust/combust-nft.sh
+ExecStop=/etc/combust/combust-nft.sh --flush
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

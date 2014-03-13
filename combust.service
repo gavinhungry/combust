@@ -3,8 +3,8 @@ Description=combust Firewall Script
 
 [Service]
 Type=oneshot
-ExecStart=/etc/iptables/combust.sh
-ExecStop=/etc/iptables/combust.sh --flush
+ExecStart=/etc/combust/combust.sh
+ExecStop=/etc/combust/combust.sh --flush
 RemainAfterExit=yes
 
 [Install]

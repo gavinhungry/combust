@@ -8,7 +8,7 @@
 
 declare -A IF
 declare -A CLIENTS
-source /etc/iptables/combust.conf
+source /etc/combust/combust.conf
 
 ERRORS=0
 for PARM in "$@"; do
