@@ -2,7 +2,7 @@
 #
 # Name: combust-nft
 # Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Date: 06 Mar 2014 (last modified: 12 Mar 2014)
+# Date: 06 Mar 2014 (last modified: 13 Mar 2014)
 # Desc: nftables-based firewall script with simple profiles
 #
 
