@@ -85,7 +85,7 @@ Clients in a routing environment can be named for easy port-forwarding:
 
 Then, to forward ports:
 
-    ${PROTOCOL}_${CLIENT}="${PORT1} [${PORT2}] ..."
+    ${PROTOCOL}_${CLIENT_NAME}="${PORT1} [${PORT2}] ..."
     TCP_LAPTOP='10443'
 
 The above line forwards TCP port 10443 from the router to the client named
