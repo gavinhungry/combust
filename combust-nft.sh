@@ -132,11 +132,11 @@ if pref FLUSH; then
 fi
 
 # input/output/forward chains on a filter table
-$NFT -f /etc/nftables/ipv4-filter
-$NFT -f /etc/nftables/ipv4-nat
+$NFT -f /usr/share/nftables/ipv4-filter
+$NFT -f /usr/share/nftables/ipv4-nat
 
-$NFT -f /etc/nftables/ipv6-filter
-$NFT -f /etc/nftables/ipv6-nat
+$NFT -f /usr/share/nftables/ipv6-filter
+$NFT -f /usr/share/nftables/ipv6-nat
 
 nftchain filter valid_src
 nftchain filter valid_dst
