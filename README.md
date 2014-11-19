@@ -2,13 +2,11 @@ combust
 =======
 `combust` is an iptables/nftables-based firewall script with profiles.
 
-
 Installation
 ------------
 A pair of systemd service units, `combust.service` and `combust-nft.service`, as
 well as OpenWrt-style init scripts, `combust.rc` and `combust-nft.rc`, are
 provided.
-
 
 Configuration
 -------------
