@@ -129,9 +129,12 @@ if [ ! -z "$IPV6_WAN" ]; then
   done
 fi
 
-ipt  -A valid_dst_ipv4 -d 127.0.0.0/8 -j DROP
+if pref STRICT_LOOPBACK; then
+  ipt  -A valid_dst_ipv4 -d 127.0.0.0/8 -j DROP
+  ipt6 -A valid_dst_ipv6 -d ::1/128     -j DROP
+fi
+
 ipt  -A valid_dst_ipv4 -d 224.0.0.0/4 -j DROP
-ipt6 -A valid_dst_ipv6 -d ::1/128     -j DROP
 
 
 # ---[ INPUT ]------------------------------------------------------------------
@@ -147,8 +150,13 @@ ipt  -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 ipt6 -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # loopback
-ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
-ipt6 -A INPUT -i ${IF[LO]} -s ::1/128 -d ::1/128 -j ACCEPT
+if pref STRICT_LOOPBACK; then
+  ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
+  ipt6 -A INPUT -i ${IF[LO]} -s ::1/128 -d ::1/128 -j ACCEPT
+else
+  ipt  -A INPUT -i ${IF[LO]} -d 127.0.0.0/8 -j ACCEPT
+  ipt6 -A INPUT -i ${IF[LO]} -d ::1/128 -j ACCEPT
+fi
 
 msg 'filter/INPUT: common attacks'
 ipt  -N syn_flood_ipv4

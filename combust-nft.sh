@@ -169,10 +169,13 @@ fi
 nft6rule filter valid_src ip6 saddr ::1/128 drop
 
 msg 'External interface destinations'
-nft4rule filter valid_dst ip daddr 127.0.0.0/8 drop
-nft4rule filter valid_dst ip daddr 224.0.0.0/4 drop
 
-nft6rule filter valid_dst ip6 daddr ::1/128 drop
+if pref STRICT_LOOPBACK; then
+  nft4rule filter valid_dst ip daddr 127.0.0.0/8 drop
+  nft6rule filter valid_dst ip6 daddr ::1/128 drop
+fi
+
+nft4rule filter valid_dst ip daddr 224.0.0.0/4 drop
 
 
 # ---[ INPUT ]------------------------------------------------------------------
@@ -182,8 +185,13 @@ nftrule filter input ct state invalid drop
 nftrule filter input ct state { related, established } accept
 
 # loopback
-nft4rule filter input iifname ${IF[LO]} ip saddr 127.0.0.0/8 ip daddr 127.0.0.0/8 accept
-nft6rule filter input iifname ${IF[LO]} ip6 saddr ::1/128 ip6 daddr ::1/128 accept
+if pref STRICT_LOOPBACK; then
+  nft4rule filter input iifname ${IF[LO]} ip saddr 127.0.0.0/8 ip daddr 127.0.0.0/8 accept
+  nft6rule filter input iifname ${IF[LO]} ip6 saddr ::1/128 ip6 daddr ::1/128 accept
+else
+  nft4rule filter input iifname ${IF[LO]} ip daddr 127.0.0.0/8 accept
+  nft6rule filter input iifname ${IF[LO]} ip6 daddr ::1/128 accept
+fi
 
 msg 'filter/input: common attacks'
 nftchain filter syn_flood
