@@ -24,6 +24,9 @@ inbound and outbound, are dropped.
 
 `ROUTING`: Set to `1` if the host is a router.
 
+`STRICT_LOOPBACK`: Set to `1` to only allow loopback connections directly to and
+from the loopback interface.
+
 
 #### IP Ranges
 `IPV4_LAN`: Optional list of local IP ranges (in CIDR notation).
