@@ -111,7 +111,7 @@ msg 'Flushing existing rules'
 
 # https://twitter.com/gavinhungry/status/441743648611262464
 for FAMILY in ip ip6 arp bridge; do
-  TABLES=$($NFT list tables $FAMILY | grep "^table\s" | cut -d' ' -f2)
+  TABLES=$($NFT list tables $FAMILY | grep "^table\s${FAMILY}\s" | cut -d' ' -f3)
 
   for TABLE in $TABLES; do
     CHAINS=$($NFT list table $FAMILY $TABLE | grep "^\schain\s" | cut -d' ' -f2)
@@ -125,6 +125,7 @@ for FAMILY in ip ip6 arp bridge; do
     nft $FAMILY delete table $TABLE
   done
 done
+
 
 if pref FLUSH; then
   finish
