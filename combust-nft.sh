@@ -28,7 +28,7 @@ pref() {
 }
 
 msg() {
-  pref VERBOSE && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
+  pref VERBOSE && echo -e "\n\e[0;33;40m$@\e[0m"
 }
 
 finish() {
