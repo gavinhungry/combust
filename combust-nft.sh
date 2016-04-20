@@ -36,16 +36,20 @@ finish() {
   exit $ERRORS
 }
 
+nftraw() {
+  pref VERBOSE && echo "nft $@"
+
+  if ! pref DRYRUN; then
+    $NFT $@ || let ERRORS++
+  fi
+}
+
 nft() {
   FAMILY=$1; shift
   CMD=$1; shift
   SUBCMD=$1; shift
 
-  pref VERBOSE && echo "nft $CMD $SUBCMD $FAMILY $@"
-
-  if ! pref DRYRUN; then
-    $NFT $CMD $SUBCMD $FAMILY $@ || let ERRORS++
-  fi
+  nftraw $CMD $SUBCMD $FAMILY $@
 }
 
 nft4() {
@@ -109,34 +113,18 @@ inet6() {
 # ---[ FLUSH ]------------------------------------------------------------------
 msg 'Flushing existing rules'
 
-# https://twitter.com/gavinhungry/status/441743648611262464
-for FAMILY in ip ip6 arp bridge; do
-  TABLES=$($NFT list tables $FAMILY | grep "^table\s${FAMILY}\s" | cut -d' ' -f3)
-
-  for TABLE in $TABLES; do
-    CHAINS=$($NFT list table $FAMILY $TABLE | grep "^\schain\s" | cut -d' ' -f2)
-
-    for CHAIN in $CHAINS; do
-      nft $FAMILY flush chain $TABLE $CHAIN
-      nft $FAMILY delete chain $TABLE $CHAIN
-    done
-
-    nft $FAMILY flush table $TABLE
-    nft $FAMILY delete table $TABLE
-  done
-done
-
+nftraw flush ruleset
 
 if pref FLUSH; then
   finish
 fi
 
 # input/output/forward chains on a filter table
-$NFT -f /usr/share/nftables/ipv4-filter
-$NFT -f /usr/share/nftables/ipv4-nat
+nftraw -f /usr/share/nftables/ipv4-filter
+nftraw -f /usr/share/nftables/ipv4-nat
 
-$NFT -f /usr/share/nftables/ipv6-filter
-$NFT -f /usr/share/nftables/ipv6-nat
+nftraw -f /usr/share/nftables/ipv6-filter
+nftraw -f /usr/share/nftables/ipv6-nat
 
 nftchain filter valid_src
 nftchain filter valid_dst
