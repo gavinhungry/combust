@@ -28,7 +28,7 @@ pref() {
 }
 
 msg() {
-  pref VERBOSE && echo -e "\n\033[1m$(basename $0)\033[0m: $@"
+  pref VERBOSE && echo -e "\n\e[0;33;40m$@\e[0m"
 }
 
 finish() {
@@ -37,7 +37,7 @@ finish() {
 }
 
 ipt() {
-  pref VERBOSE && echo "IPv4: $@"
+  pref VERBOSE && echo "iptables $@"
   if ! pref DRYRUN; then
     $IPTABLES "$@" || let ERRORS++
   fi
@@ -49,7 +49,7 @@ ipt6() {
 }
 
 ipt6_do() {
-  pref VERBOSE && echo "IPv6: $@"
+  pref VERBOSE && echo "ip6tables $@"
   if ! pref DRYRUN; then
     $IP6TABLES "$@"
   fi
