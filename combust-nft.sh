@@ -216,7 +216,7 @@ if pref ICMP_REPLY; then
 fi
 
 # IPv6
-nft6rule filter input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert } accept
+nft6rule filter input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
 
 msg 'filter/input: per-interface rules'
 for IL in ${!IF[@]}; do
