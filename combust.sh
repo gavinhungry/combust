@@ -1,15 +1,12 @@
 #!/bin/bash
-#
-# Name: combust
-# Auth: Gavin Lloyd <gavinhungry@gmail.com>
-# Desc: iptables-based firewall script with simple profiles
-#
 
-IPTABLES=/usr/bin/iptables
-IP6TABLES=/usr/bin/ip6tables
+set -e
+set -o pipefail
+
+NFT=/usr/bin/nft
+IP=/usr/bin/ip
 
 declare -A IF
-declare -A CLIENTS
 source /etc/combust/combust.conf
 
 ERRORS=0
@@ -20,7 +17,6 @@ for PARM in "$@"; do
     '-f'|'--flush') FLUSH=1 ;;
   esac
 done
-
 
 # ---[ FUNCTIONS ]--------------------------------------------------------------
 pref() {
@@ -36,190 +32,197 @@ finish() {
   exit $ERRORS
 }
 
-ipt() {
-  pref VERBOSE && echo "iptables $@"
+nftraw() {
+  pref VERBOSE && echo "nft $@"
+
   if ! pref DRYRUN; then
-    $IPTABLES "$@" || let ERRORS++
+    $NFT $@ || let ERRORS++
   fi
 }
 
-ipt6() {
+nft() {
+  FAMILY=$1; shift
+  CMD=$1; shift
+  SUBCMD=$1; shift
+
+  nftraw $CMD $SUBCMD $FAMILY $@
+}
+
+nft4() {
+  nft "ip" "$@"
+}
+
+nft6() {
   pref USE_IPV6 || return 0
-  ipt6_do "$@" || let ERRORS++
+  nft "ip6" "$@"
 }
 
-ipt6_do() {
-  pref VERBOSE && echo "ip6tables $@"
-  if ! pref DRYRUN; then
-    $IP6TABLES "$@"
-  fi
+nft4chain() {
+  nft4 add chain "$@"
 }
 
+nft6chain() {
+  nft6 add chain "$@"
+}
+
+nftchain() {
+  nft4chain "$@"
+  nft6chain "$@"
+}
+
+nft4rule() {
+  nft4 add rule "$@"
+}
+
+nft6rule() {
+  nft6 add rule "$@"
+}
+
+nftrule() {
+  nft4rule "$@"
+  nft6rule "$@"
+}
+
+nftpolicy() {
+  TABLE=$1
+  CHAIN=$2
+  POLICY=$3
+
+  nft ip add rule $TABLE $CHAIN $POLICY
+
+  pref USE_IPV6 || POLICY=drop
+  nft ip6 add rule $TABLE $CHAIN $POLICY
+}
+
+_awksub_ip() {
+  grep "\s${1}$" | awk '{sub(/\/.*/,"",$2); print $2}'
+}
+
+inet() {
+  $IP -4 addr show $1 | grep '^\s*inet\s' | _awksub_ip $1
+}
+
+inet6() {
+  $IP -6 addr show $1 | grep '^\s*inet6\s' | _awksub_ip $1
+}
+
+interfaces() {
+  for I in ${IF[$1]}; do
+    for IX in ${IF[$I]-$I}; do
+      echo ${IF[$IX]-$IX}
+    done
+  done
+}
 
 # ---[ FLUSH ]------------------------------------------------------------------
 msg 'Flushing existing rules'
 
-ipt -Z
-ipt -F
-ipt -X
-ipt -t nat -F
-ipt -t nat -X
-ipt -t mangle -F
-ipt -t mangle -X
-
-ipt6 -Z
-ipt6 -F
-ipt6 -X
+nftraw flush ruleset
 
 if pref FLUSH; then
-  ipt -P INPUT ACCEPT
-  ipt -P OUTPUT ACCEPT
-  ipt -P FORWARD ACCEPT
-
-  ipt6 -P INPUT ACCEPT
-  ipt6 -P OUTPUT ACCEPT
-  ipt6 -P FORWARD ACCEPT
-
   finish
 fi
 
-if ! pref USE_IPV6 && [ -x $IP6TABLES ]; then
-  msg 'Not using IPv6'
+# input/output/forward chains on a filter table
+nftraw -f /usr/share/nftables/ipv4-filter
+nftraw -f /usr/share/nftables/ipv6-filter
 
-  ipt6_do -Z
-  ipt6_do -F
-  ipt6_do -X
-  ipt6_do -P INPUT DROP
-  ipt6_do -P OUTPUT DROP
-  ipt6_do -P FORWARD DROP
+if pref VPN_SERVER; then
+  nftraw -f /usr/share/nftables/ipv4-nat
+  nftraw -f /usr/share/nftables/ipv6-nat
 fi
 
-ipt -N valid_src_ipv4
-ipt -N valid_dst_ipv4
-
-ipt6 -N valid_src_ipv6
-ipt6 -N valid_dst_ipv6
-
+nftchain filter valid_src
+nftchain filter valid_dst
 
 # ---[ VALID ]------------------------------------------------------------------
 msg 'External interface sources'
-if [ ! -z "$IPV4_WAN" ]; then
-  for RANGE in $IPV4_WAN; do
-    ipt -A valid_src_ipv4 -s $RANGE -j RETURN
+if [ -n "$IPV4_LAN" ]; then
+  for RANGE in $IPV4_LAN; do
+    nft4rule filter valid_src ip saddr $RANGE return
   done
 fi
 
-[ -z $RFC_1918_BITS ] && RFC_1918_BITS=0
-[ $RFC_1918_BITS -ne 24 ] && ipt -A valid_src_ipv4 -s 10.0.0.0/8     -j DROP
-[ $RFC_1918_BITS -ne 20 ] && ipt -A valid_src_ipv4 -s 172.16.0.0/12  -j DROP
-[ $RFC_1918_BITS -ne 16 ] && ipt -A valid_src_ipv4 -s 192.168.0.0/16 -j DROP
+# RFC1918 private addresses - include in IPV4_LAN to allow
+nft4rule filter valid_src ip saddr 10.0.0.0/8     drop
+nft4rule filter valid_src ip saddr 172.16.0.0/12  drop
+nft4rule filter valid_src ip saddr 192.168.0.0/16 drop
 
-ipt  -A valid_src_ipv4 -s 127.0.0.0/8     -j DROP
-ipt  -A valid_src_ipv4 -s 169.254.0.0/16  -j DROP
-ipt  -A valid_src_ipv4 -s 0.0.0.0/8       -j DROP
-ipt  -A valid_src_ipv4 -s 224.0.0.0/4     -j DROP
-ipt  -A valid_src_ipv4 -s 255.255.255.255 -j DROP
-ipt6 -A valid_src_ipv6 -s ::1/128         -j DROP
+nft4rule filter valid_src ip saddr 127.0.0.0/8     drop
+nft4rule filter valid_src ip saddr 169.254.0.0/16  drop
+nft4rule filter valid_src ip saddr 0.0.0.0/8       drop
+nft4rule filter valid_src ip saddr 255.255.255.255 drop
+nft4rule filter valid_src ip saddr 192.168.0.0/16  drop
+
+if [ -n "$IPV6_LAN" ]; then
+  for RANGE in $IPV6_LAN; do
+    nft6rule filter valid_src ip6 saddr $RANGE return
+  done
+fi
+
+nft6rule filter valid_src ip6 saddr ::1/128 drop
 
 msg 'External interface destinations'
-if [ ! -z "$IPV6_WAN" ]; then
-  for RANGE in $IPV6_WAN; do
-    ipt6 -A valid_src_ipv6 -s $RANGE -j RETURN
-  done
-fi
 
 if pref STRICT_LOOPBACK; then
-  ipt  -A valid_dst_ipv4 -d 127.0.0.0/8 -j DROP
-  ipt6 -A valid_dst_ipv6 -d ::1/128     -j DROP
+  nft4rule filter valid_dst ip daddr 127.0.0.0/8 drop
+  nft6rule filter valid_dst ip6 daddr ::1/128 drop
 fi
-
-ipt  -A valid_dst_ipv4 -d 224.0.0.0/4 -j DROP
 
 
 # ---[ INPUT ]------------------------------------------------------------------
-msg 'filter/INPUT'
+msg 'filter/input'
 
-ipt  -P INPUT DROP
-ipt6 -P INPUT DROP
-
-ipt  -A INPUT -m conntrack --ctstate INVALID -j DROP
-ipt6 -A INPUT -m conntrack --ctstate INVALID -j DROP
-
-ipt  -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-ipt6 -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+nftrule filter input ct state invalid drop
+nftrule filter input ct state { related, established } accept
 
 # loopback
 if pref STRICT_LOOPBACK; then
-  ipt  -A INPUT -i ${IF[LO]} -s 127.0.0.0/8 -d 127.0.0.0/8 -j ACCEPT
-  ipt6 -A INPUT -i ${IF[LO]} -s ::1/128 -d ::1/128 -j ACCEPT
+  nft4rule filter input iifname ${IF[LO]} ip saddr 127.0.0.0/8 ip daddr 127.0.0.0/8 accept
+  nft6rule filter input iifname ${IF[LO]} ip6 saddr ::1/128 ip6 daddr ::1/128 accept
 else
-  ipt  -A INPUT -i ${IF[LO]} -d 127.0.0.0/8 -j ACCEPT
-  ipt6 -A INPUT -i ${IF[LO]} -d ::1/128 -j ACCEPT
+  nft4rule filter input iifname ${IF[LO]} ip daddr 127.0.0.0/8 accept
+  nft6rule filter input iifname ${IF[LO]} ip6 daddr ::1/128 accept
 fi
 
-msg 'filter/INPUT: common attacks'
-ipt  -N syn_flood_ipv4
-ipt6 -N syn_flood_ipv6
+msg 'filter/input: common attacks'
+nftchain filter syn_flood
+nftrule filter syn_flood limit rate 2/second return
+nftrule filter syn_flood drop
 
-ipt  -A syn_flood_ipv4 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
-ipt6 -A syn_flood_ipv6 -p tcp --syn -m limit --limit 2/s --limit-burst 4 -j RETURN
+for I in $(interfaces WAN); do
+  nftrule filter input iifname $I tcp flags '& (syn|rst|ack) == (syn)' jump syn_flood
 
-ipt  -A syn_flood_ipv4 -j DROP
-ipt6 -A syn_flood_ipv6 -j DROP
+  nftrule filter input iifname $I ct state new tcp flags '& (syn) < (syn)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (syn|rst) == (syn|rst)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) < (fin)' drop
+  nftrule filter input iifname $I ct state new tcp flags '== (fin|syn|rst|psh|ack|urg)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|psh|urg)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn|psh|urg)' drop
 
-for I in ${IF[WAN]}; do
-  WAN=${IF[$I]-$I}
-
-  ipt  -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv4
-  ipt6 -A INPUT -i $WAN -p tcp --syn -j syn_flood_ipv6
-
-  ipt  -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp -m conntrack --ctstate NEW ! --syn -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL SYN,FIN -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL SYN,FIN -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL FIN -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL FIN -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL NONE -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL NONE -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL ALL -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL ALL -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,FIN -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,FIN -j DROP
-
-  ipt  -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,SYN,FIN -j DROP
-  ipt6 -A INPUT -i $WAN -p tcp --tcp-flags ALL URG,PSH,SYN,FIN -j DROP
-
-  ipt  -A INPUT -i $WAN -j valid_src_ipv4
-  ipt6 -A INPUT -i $WAN -j valid_src_ipv6
+  nftrule filter input iifname $I jump valid_src
 done
 
-msg 'filter/INPUT: allowed LAN traffic'
-if pref ROUTING; then
-  ipt  -A INPUT -i ${IF[LAN]} -j ACCEPT
-  ipt6 -A INPUT -i ${IF[LAN]} -j ACCEPT
-fi
+msg 'filter/input: forwarded interfaces'
+for I in $(interfaces FOR); do
+  nftrule filter forward iifname $I accept
+  nftrule filter forward oifname $I accept
+done
 
-# ICMP ping
+msg 'filter/input: ICMP reply'
 if pref ICMP_REPLY; then
-  ipt  -A INPUT -p icmp   --icmp-type   echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
-  ipt6 -A INPUT -p icmpv6 --icmpv6-type echo-request -m limit --limit 2/s --limit-burst 4 -j ACCEPT
+  nft4rule filter input icmp   type echo-request limit rate 8/second accept
+  nft6rule filter input icmpv6 type echo-request limit rate 8/second accept
 fi
 
 # IPv6
-ipt6 -A INPUT -p icmpv6 -m icmp6 -s fe80::/10 --icmpv6-type neighbour-solicitation  -j ACCEPT
-ipt6 -A INPUT -p icmpv6 -m icmp6 -s fe80::/10 --icmpv6-type neighbour-advertisement -j ACCEPT
+nft6rule filter input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
 
-msg 'filter/INPUT: per-interface rules'
+msg 'filter/input: per-interface rules'
 for IL in ${!IF[@]}; do
-  for I in ${IF[$IL]}; do
+  for I in $(interfaces ${IF[$IL]}); do
     for PROTO in TCP UDP; do
       PROTO_IL=${PROTO}_${IL}
       for PORT in ${!PROTO_IL}; do
@@ -228,14 +231,13 @@ for IL in ${!IF[@]}; do
           LIMIT=$(echo $PORT | cut -d':' -f2)
           BURST=$(echo $PORT | cut -d':' -f3)
           for P in $(eval echo "$DPORT"); do
-            ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
-            ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -m conntrack --ctstate NEW -m limit --limit ${LIMIT:-8}/m --limit-burst ${BURST:-4} -j ACCEPT
+
+            nftrule filter input iifname $I ct state new ${PROTO,,} dport $P limit rate ${LIMIT:-8}/minute accept
           done
           continue
         fi
         for P in $(eval echo "$PORT"); do
-          ipt  -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
-          ipt6 -A INPUT -i ${IF[$I]-$I} -p ${PROTO,,} --dport $P -j ACCEPT
+          nftrule filter input iifname $I ${PROTO,,} dport $P accept
         done
       done
     done
@@ -244,80 +246,42 @@ done
 
 
 # ---[ OUTPUT ]-----------------------------------------------------------------
-msg 'filter/OUTPUT'
+msg 'filter/output'
 
-ipt  -P OUTPUT ACCEPT
-ipt6 -P OUTPUT ACCEPT
+nftrule filter output ct state invalid drop
 
-ipt  -A OUTPUT -m conntrack --ctstate INVALID -j DROP
-ipt6 -A OUTPUT -m conntrack --ctstate INVALID -j DROP
-
-for I in ${IF[WAN]}; do
-  ipt  -A OUTPUT -o ${IF[$I]-$I} -j valid_dst_ipv4
-  ipt6 -A OUTPUT -o ${IF[$I]-$I} -j valid_dst_ipv6
+for I in $(interfaces WAN); do
+  nftrule filter output oifname $I jump valid_dst
 done
 
 
 # ---[ FORWARD ]----------------------------------------------------------------
-msg 'filter/FORWARD'
+msg 'filter/forward'
 
-ipt  -P FORWARD DROP
-ipt6 -P FORWARD DROP
+nftrule filter forward ct state invalid drop
 
-ipt  -A FORWARD -m conntrack --ctstate INVALID -j DROP
-ipt6 -A FORWARD -m conntrack --ctstate INVALID -j DROP
-
-msg 'filter/FORWARD: route forwarding'
-if pref ROUTING; then
-  ipt  -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-  ipt6 -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-
-  ipt  -A FORWARD -i ${IF[LAN]} -o ${IF[LAN]} -j ACCEPT
-  ipt6 -A FORWARD -i ${IF[LAN]} -o ${IF[LAN]} -j ACCEPT
-
-  for I in ${IF[WAN]}; do
-    ipt  -A FORWARD -i ${IF[LAN]} -o ${IF[$I]-$I} -j ACCEPT
-    ipt6 -A FORWARD -i ${IF[LAN]} -o ${IF[$I]-$I} -j ACCEPT
-  done
-fi
-
+msg 'filter/forward: route forwarding'
 if pref VPN_SERVER; then
-  for I in ${IF[WAN]}; do
-    ipt  -A FORWARD -i ${IF[$I]-$I} -o ${IF[VPN]} -d $IPV4_VPN -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-    ipt  -A FORWARD -i ${IF[VPN]} -o ${IF[$I]-$I} -s $IPV4_VPN -j ACCEPT
+  for I in $(interfaces WAN); do
+    nft4rule filter forward iifname $I oifname ${IF[VPN]} ip daddr $IPV4_VPN ct state { related, established } accept
+    nft4rule filter forward iifname ${IF[VPN]} oifname $I ip saddr $IPV4_VPN accept
   done
 fi
-
-msg 'filter/FORWARD: client port forwards'
-for CLIENT in ${!CLIENTS[@]}; do
-  for PROTO in TCP UDP; do
-    PROTO_CLIENT=${PROTO}_${CLIENT}
-    for PORT in ${!PROTO_CLIENT}; do
-      FROM=$(echo $PORT | cut -d':' -f1)
-      DEST=$(echo $PORT | cut -d':' -f2)
-      HOST=${CLIENTS[$CLIENT]}
-      for I in ${IF[WAN]}; do
-        ipt -t nat -A PREROUTING -i ${IF[$I]-$I} -p ${PROTO,,} --dport $FROM -j DNAT --to-destination $HOST:$DEST
-        ipt        -A FORWARD    -i ${IF[$I]-$I} -p ${PROTO,,} --dport $DEST -d $HOST -j ACCEPT
-      done
-    done
-  done
-done
-
 
 # ---[ POSTROUTING ]------------------------------------------------------------
-msg 'nat/POSTROUTING'
+msg 'nat/postrouting'
+for I in $(interfaces WAN); do
+  if INET=$(inet $I); then
+    if pref VPN_SERVER; then
+      nft4rule nat postrouting oifname $I ip saddr $IPV4_VPN snat $INET
+    fi
+  fi
+done
 
-if pref VPN_SERVER; then
-  for I in ${IF[WAN]}; do
-    ipt -t nat -A POSTROUTING -o ${IF[$I]-$I} -s $IPV4_VPN -j MASQUERADE
-  done
-fi
-
-if pref ROUTING; then
-  for I in ${IF[WAN]}; do
-    ipt -t nat -A POSTROUTING -o ${IF[$I]-$I} -j MASQUERADE
-  done
-fi
+# ---[ POLICY ]-----------------------------------------------------------------
+msg 'default chain policies'
+nftpolicy filter input drop
+nftpolicy filter output accept
+nftpolicy filter forward drop
 
 finish

@@ -1,18 +1,11 @@
 combust
 =======
-`combust` is an iptables/nftables-based firewall script with profiles.
-
-Installation
-------------
-A pair of systemd service units, `combust.service` and `combust-nft.service`, as
-well as OpenWrt-style init scripts, `combust.rc` and `combust-nft.rc`, are
-provided.
+`combust` is an [nftables](http://netfilter.org/projects/nftables) firewall
+script with profiles.
 
 Configuration
 -------------
-All configuration options are located in `/etc/combust/combust.conf`.  A
-configuration profile may be used with either the iptables or the nftables
-variant.
+All configuration options are located in `/etc/combust/combust.conf`.
 
 `ICMP_REPLY`: Set to `1` to enable ping replies.
 
@@ -21,8 +14,6 @@ inbound and outbound, are dropped.
 
 `VPN_SERVER`: Set to `1` if the host is a VPN server. See also `IPV4_VPN` and
 `IF[VPN]`.
-
-`ROUTING`: Set to `1` if the host is a router.
 
 `STRICT_LOOPBACK`: Set to `1` to only allow loopback connections directly to and
 from the loopback interface.
@@ -35,12 +26,11 @@ from the loopback interface.
 
 
 ### Local Interfaces
-`IF`: An array of group names to interfaces (or other group names).  For
-example:
+`IF`: An array of group names to interfaces (or other group names). For example:
 
 ```sh
 IF=(
-  # [${GROUP_NAME}]="${INTERFACE1} [${INTERFACE2}] ..."
+  [LO]='lo'
   [LAN]='eth0'
   [WLAN]='wlan0'
   [WAN]='LAN WLAN'
@@ -74,41 +64,8 @@ TCP_WAN='22:4'
 ```
 
 This will limit connections to TCP port 22 on the WAN interfaces to 4 per
-minute.  The burst-rate can also be specified here, after the per-minute rate:
+minute.
 
-```sh
-TCP_WAN='22:4:8'
-```
-
-> **Note**: Burst-rate currently only works in the iptables version.
-
-
-### Clients
-Clients in a routing environment can be named for easy port-forwarding:
-
-```sh
-CLIENTS=(
-  # [${CLIENT_NAME}]="${IP}"
-  [LAPTOP]='172.168.1.1'
-)
-```
-
-Then, to forward ports:
-
-```sh
-${PROTOCOL}_${CLIENT_NAME}="${PORT1} [${PORT2}] ..."
-TCP_LAPTOP='10443'
-```
-
-The above line forwards TCP port 10443 from the router to the client named
-LAPTOP.  To forward to a different port, delimit the source and destination with
-a colon:
-
-```sh
-TCP_LAPTOP='10443:443'
-```
-
-LICENSE
+License
 -------
-`combust` is released under the terms of the
-[MIT license](http://tldrlegal.com/license/mit-license). See **LICENSE**.
+This software is released under the terms of the **MIT license**. See `LICENSE`.
