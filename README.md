@@ -5,7 +5,7 @@ script with profiles.
 
 Configuration
 -------------
-All configuration options are located in `/etc/combust/combust.conf`.
+All configuration options are located in `/etc/combust.conf`.
 
 `ICMP_REPLY`: Set to `1` to enable ping replies.
 
