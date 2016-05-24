@@ -221,7 +221,7 @@ nft6rule filter input ip6 saddr fe80::/10 icmpv6 type { nd-neighbor-solicit, nd-
 
 msg 'filter/input: per-interface rules'
 for IL in ${!IF[@]}; do
-  for I in $(interfaces ${IF[$IL]}); do
+  for I in $(interfaces $IL); do
     for PROTO in TCP UDP; do
       PROTO_IL=${PROTO}_${IL}
       for PORT in ${!PROTO_IL}; do
