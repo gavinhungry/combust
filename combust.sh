@@ -7,7 +7,7 @@ NFT=/usr/bin/nft
 IP=/usr/bin/ip
 
 declare -A IF
-source /etc/combust/combust.conf
+source /etc/combust.conf
 
 ERRORS=0
 for PARM in "$@"; do
