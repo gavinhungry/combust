@@ -3,8 +3,8 @@ Description=Netfilter (nftables) Firewall Script
 
 [Service]
 Type=oneshot
-ExecStart=/etc/combust/combust.sh
-ExecStop=/etc/combust/combust.sh --flush
+ExecStart=/usr/bin/combust
+ExecStop=/usr/bin/combust --flush
 RemainAfterExit=yes
 
 [Install]
