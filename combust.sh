@@ -267,6 +267,12 @@ if pref VPN_SERVER; then
   done
 fi
 
+msg 'filter/input: forwarded interfaces'
+for I in $(interfaces FOR); do
+    nftrule filter forward iifname $I accept
+    nftrule filter forward oifname $I accept
+done
+
 # ---[ POSTROUTING ]------------------------------------------------------------
 msg 'nat/postrouting'
 for I in $(interfaces WAN); do
