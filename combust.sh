@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# https://github.com/gavinhungry/combust
+#
 
 set -o pipefail
 
