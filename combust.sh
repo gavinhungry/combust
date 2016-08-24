@@ -35,7 +35,7 @@ nftraw() {
   pref VERBOSE && echo "nft $@"
 
   if ! pref DRYRUN; then
-    $NFT $@ || let ERRORS++
+    $NFT "$@" || let ERRORS++
   fi
 }
 
@@ -44,7 +44,7 @@ nft() {
   CMD=$1; shift
   SUBCMD=$1; shift
 
-  nftraw $CMD $SUBCMD $FAMILY $@
+  nftraw "$CMD $SUBCMD $FAMILY $@"
 }
 
 nft4() {
@@ -190,16 +190,16 @@ nftrule filter syn_flood limit rate 2/second return
 nftrule filter syn_flood drop
 
 for I in $(interfaces WAN); do
-  nftrule filter input iifname $I tcp flags '& (syn|rst|ack) == (syn)' jump syn_flood
+  nftrule filter input iifname $I tcp flags '& (syn|rst|ack) == syn' jump syn_flood
 
-  nftrule filter input iifname $I ct state new tcp flags '& (syn) < (syn)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (syn|rst) == (syn|rst)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) < (fin)' drop
-  nftrule filter input iifname $I ct state new tcp flags '== (fin|syn|rst|psh|ack|urg)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|psh|urg)' drop
-  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == (fin|syn|psh|urg)' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (syn) < syn' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (syn|rst) == syn|rst' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == fin|syn' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == fin' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) < fin' drop
+  nftrule filter input iifname $I ct state new tcp flags '== fin|syn|rst|psh|ack|urg' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == fin|psh|urg' drop
+  nftrule filter input iifname $I ct state new tcp flags '& (fin|syn|rst|psh|ack|urg) == fin|syn|psh|urg' drop
 
   nftrule filter input iifname $I jump valid_src
 done
