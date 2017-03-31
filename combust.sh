@@ -189,7 +189,7 @@ fi
 
 msg 'filter/input: common attacks'
 nftchain filter syn_flood
-nftrule filter syn_flood limit rate 2/second return
+nftrule filter syn_flood limit rate ${SYN_FLOOD_RATE:-10}/second return
 nftrule filter syn_flood drop
 
 for I in $(interfaces WAN); do
