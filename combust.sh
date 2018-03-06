@@ -59,6 +59,19 @@ nft6() {
   nft "ip6" "$@"
 }
 
+nft4table() {
+  nft4 add table "$@"
+}
+
+nft6table() {
+  nft6 add table "$@"
+}
+
+nfttable() {
+  nft4table "$@"
+  nft6table "$@"
+}
+
 nft4chain() {
   nft4 add chain "$@"
 }
@@ -125,13 +138,17 @@ if pref FLUSH; then
   finish
 fi
 
-# input/output/forward chains on a filter table
-nftraw -f /usr/share/nftables/ipv4-filter
-nftraw -f /usr/share/nftables/ipv6-filter
+nfttable filter
+nftchain filter input '{ type filter hook input priority 0; }'
+nftchain filter forward '{ type filter hook forward priority 0; }'
+nftchain filter output '{ type filter hook output priority 0; }'
 
 if pref VPN_SERVER; then
-  nftraw -f /usr/share/nftables/ipv4-nat
-  nftraw -f /usr/share/nftables/ipv6-nat
+  nfttable nat
+  nftchain nat prerouting '{ type nat hook prerouting priority -100; }'
+  nftchain nat input '{ type nat hook input priority 100; }'
+  nftchain nat output '{ type nat hook output priority -100; }'
+  nftchain nat postrouting '{ type nat hook postrouting priority 100; }'
 fi
 
 nftchain filter valid_src
