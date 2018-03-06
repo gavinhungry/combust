@@ -98,17 +98,6 @@ nftrule() {
   nft6rule "$@"
 }
 
-nftpolicy() {
-  TABLE=$1
-  CHAIN=$2
-  POLICY=$3
-
-  nft ip add rule $TABLE $CHAIN $POLICY
-
-  pref USE_IPV6 || POLICY=drop
-  nft ip6 add rule $TABLE $CHAIN $POLICY
-}
-
 _awksub_ip() {
   grep "\s${1}$" | awk '{sub(/\/.*/,"",$2); print $2}'
 }
@@ -305,8 +294,8 @@ done
 
 # ---[ POLICY ]-----------------------------------------------------------------
 msg 'default chain policies'
-nftpolicy filter input drop
-nftpolicy filter output accept
-nftpolicy filter forward drop
+nftrule filter input drop
+nftrule filter output accept
+nftrule filter forward drop
 
 finish
